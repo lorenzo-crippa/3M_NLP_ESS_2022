@@ -1,0 +1,652 @@
+---
+title: An R Markdown document converted from "Tutorial_One_(R)_Intro_to_String_Manipulation_and_Regular_Expressions.ipynb"
+output: html_document
+---
+
+<a href="https://colab.research.google.com/github/lorenzo-crippa/3M_NLP_ESS_2022/blob/main/Tutorial_One_(R)_Intro_to_String_Manipulation_and_Regular_Expressions.ipynb" target="_parent"><img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/></a>
+
+# Intro to String Manipulation and Regular Expressions in R
+
+### Douglas Rice
+
+In this notebook, we'll learn about doing standard natural language processing (NLP) tasks in R, and will be introduced to regular expressions. After completing this notebook, you should be familar with:
+
+
+1.   Manipulating strings in R.
+2.   Extracting elements from strings / vectors.
+3. Working with Regular Expressions in R
+
+
+
+
+
+# Working with Strings
+
+Our focus is on "strings", or ordered sequences of characters. Importantly, a string can be short ("Hello!"), long ("supercalafragalisticexpealadotios!"), much longer (like a book), and everything in between. In a word, strings are text. 
+
+
+## Setup
+
+```{r}
+install.packages("quanteda")
+
+library(quanteda)
+library(tidyverse)
+```
+
+## Working with Strings
+
+Let's look at a string. These can be specified using double quotes (“) or single quotes (’):
+
+```{r}
+a_string <- 'Example STRING, with numbers (12, 15 and also 10.2)?!'
+a_string
+```
+
+What happens if you use one of the quotes that *is* inside the string? 
+
+```{r}
+#my_whoops_string <- "He asked, "Why would you use double quotes""
+```
+
+Ah, a dreaded syntax error! This is because quotes are *special characters*; they signify something in the programming language. 
+
+To get around this conundrum, you can use a \ (backslash) to tell R to *escape* the next character. In the example below, the \" is saying, " is part of the string, not the end of the string.
+
+```{r}
+my_string_with_double_quotes <- "She answered, \"Convenience, but you never really have to.\""
+my_string_with_double_quotes
+```
+
+If you ever want to see how your string with escape characters displays when printed or (typically) in an editor, use `writeLines()`.
+
+```{r}
+writeLines(my_string_with_double_quotes)
+```
+
+This can get a little bit confusing. For example, since the backslash character tells R to escape, to indicate an actual backslash character you have to backslash your backslashes:
+
+```{r}
+a_string_with_backslashes <- "To indicate a backslash, \\, you have to type two: \\\\. Just there, to indicate two backslashes, I had to type four: \\\\\\\\."
+a_string_with_backslashes
+```
+
+```{r}
+writeLines(a_string_with_backslashes)
+```
+
+## Other Escape Characters
+
+As mentioned above, quotes (single or double) are just one many special escape characters that are used to perform special functions. The most common are two that you’re already used to tapping a keyboard key for without expecting a character to appear on your screen: \t (tab) and \n (newline, or "Enter").
+
+```{r}
+test_string <- "Hark, a Lark!\t*Tweet Tweet*\n  \nWhere'd it go?"
+test_string
+```
+
+```{r}
+writeLines(test_string)
+```
+
+## Sets of Strings 
+
+To this point, we have just looked at a single string. Rarely is that what we are actually interested in manipulating as social scientists, though. More frequently, we have sets of lots and lots of strings. To that end, we can create a vector of strings.
+
+```{r}
+a_list_of_strings <-  c("Manchester City", "Liverpool", "Chelsea", "Tottenham", "Arsenal")
+a_list_of_strings
+```
+
+
+
+Let's load in some other strings to work with. 
+
+```{r}
+letters_string <- letters
+letters_string
+```
+
+We can create a list from those letters, and call it letters_list
+
+```{r}
+letters_list <- list(letters_string)
+letters_list
+```
+
+We can also use some built in functionality in the "string" module to create upper-case versions of both the string and the list, and we'll call them `LETTERS`. 
+
+```{r}
+LETTERS_string <- toupper(letters_string)
+LETTERS_string
+```
+
+```{r}
+LETTERS_list = list(LETTERS_string)
+LETTERS_list
+```
+
+We'll make two different month lists, one with the abbreviation (`month_abb`) and one with the full name (`month_name`)
+
+```{r}
+month_abb <- c("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
+month_abb
+```
+
+```{r}
+month_name <- c("January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December")
+month_name
+```
+
+Let's also bring in two lists of strings for us to work with. The first (`fruit`) is a list of fruits, and the second (`words`) is a list of words. 
+
+```{r}
+install.packages("ds4psy")
+library(ds4psy)
+fruits
+```
+
+```{r}
+words
+```
+
+```{r}
+length(words)
+```
+
+As you can see above, the word list is 980 words long. Let's use these to do a quick detour on indexing.
+
+```{r}
+words[1:5]
+```
+
+```{r}
+words[1]
+```
+
+```{r}
+words[5]
+```
+
+The first line above takes the first five elements of the list. R starts at base 1 for indexing. So `words[1]` is "a", and `words[5]` "accept".    
+
+Finally, R also has a dataset called `sentences` that we can make use of.
+
+```{r}
+length(sentences)
+```
+
+```{r}
+sentences[1:5]
+```
+
+# Manipulating strings
+
+We have lots of strings to play with now. You can combine, or “concatenate”, strings very naturally using the "+" sign. Note that in the below we also add in a space between the two strings. You could potentially add anything you want in this particular spot (and can keep going with more strings).
+
+```{r}
+a_string <- "A first sentence!"
+second_string <- "Wow, two sentences."
+combined_string <- paste(a_string, second_string, sep = " ")
+combined_string
+```
+
+We can concatenate *all* the strings using `paste()` with the `collapse` argument.
+
+```{r}
+paste(month_name, collapse = " then ")
+```
+
+Let's work with those months to match abbreviations to month names. There are multiple ways to do this. We could do a `for` loop that iterates through the elements:
+
+```{r}
+month_explanations <- c()
+for(i in 1:12){
+    new_string <- paste(month.abb[i], month.name[i], sep = " stands for ")
+    month_explanations <- c(month_explanations, new_string)
+}
+month_explanations
+```
+
+Let's do the same with letter pairs
+
+```{r}
+letterpairs <- c()
+for(i in 1:length(letters_string)){
+    letterpair <- paste(letters_string[i], LETTERS_string[i], sep = "")
+    letterpairs <- c(letterpairs, letterpair)
+}
+letterpairs
+```
+
+You can split up a string into pieces, based on a pattern, with the "split" method.
+
+```{r}
+str_split(combined_string, "! ")
+```
+
+## Substrings (Slices)
+
+Substrings are just slices. We are just taking a little slice from a longer string and exporting it. For instance, to get a list of the second through fourth character in each fruit name:
+
+```{r}
+substringfromfruit <- str_sub(fruit, start = 2, end = 4)
+substringfromfruit
+```
+
+You can also count backwards from the end of the string in order to extract a slice from that end. To do so, use negative numbers and count backwards. 
+
+```{r}
+subfromend <- str_sub(fruit, start = -2, end = -1)
+print(subfromend)
+```
+
+You can use slicing to extract data from strings:
+
+```{r}
+some_dates <- c("1999/01/01","1998/12/15","2001/09/03")
+years <- str_sub(some_dates, start = 1, end = 4)
+years
+```
+
+```{r}
+months <- str_sub(some_dates, start = 6, end = 7)
+print(months)
+```
+
+Getting a copy of a string with specific positions replaced is also a matter of slicing:
+
+```{r}
+apple <- "apple"
+zebra <- "--!ZEBRA!--"
+zebraapple <- paste(str_sub(apple, 1, 2), zebra, str_sub(apple, start = 3), sep = "")
+zebraapple
+```
+
+## Capitalization
+
+Strings have a simple casefolding method that can be applied:
+
+```{r}
+tolower(combined_string)
+```
+
+```{r}
+toupper(combined_string)
+```
+
+## White Space
+
+R has several methods to trim excess white space *off the ends* of strings:
+
+```{r}
+lotsofspace = '   Why   so much  space?   '
+trimws(lotsofspace, which = "left") 
+```
+
+```{r}
+trimws(lotsofspace, which = "right")
+```
+
+```{r}
+trimws(lotsofspace, which = "both")
+```
+
+## Matching substrings
+
+If we're looking for specific substrings, there are string methods to do that.
+
+```{r}
+str_locate("strawberry", "berry")
+```
+
+That returns a matrix with the position of the beginning and the end of the match. If there is no match, it returns an empty matrix.
+
+```{r}
+str_locate("apple", "berry")
+```
+
+If there are multiple matches, `str_locate()` returns the position of the first match.
+
+```{r}
+str_locate("berryberryboberrybananafanafoferrymemymomerry berry", "berry")
+```
+
+You can pull all of the matches with `str_locate_all()`
+
+```{r}
+str_locate_all("berryberryboberrybananafanafoferrymemymomerry berry", "berry")
+```
+
+We can print all the matches from a vector of strings using `str_detect()` and relying on indexing `[]`
+
+```{r}
+fruit[str_detect(fruit, "berry")]
+```
+
+We can get a copy of the string with the substring replaced with something else:
+
+```{r}
+str_replace("strawberry","berry", "fish")
+```
+
+```{r}
+fishfruit <- str_replace(fruit, "berry","fish")
+fishfruit
+```
+
+# Regular Expressions
+
+Now we can try to generalize beyond the simple word case to broader patterns. Regular expressions allow us to capture more complex phenomena, which are often what we need when we are doing work with text-as-data. 
+
+To illustrate, we'll go back to the `sentences` data from earlier.  Let's look for the substring "dog" in it.
+
+```{r}
+str_subset(sentences, "dog")
+```
+
+That's just a search for a substring. Let's start to expand from there and use regex to look for more complex patterns than just substrings.
+
+#### Square brackets for “or” (disjunction) of characters.
+
+Match “any one of” the characters in the square brackets.
+
+```{r}
+# note that the spaces are important within the quotes below. what happens if you remove them? Why?
+str_subset(sentences, ' [hbd]og ')
+```
+
+#### Square brackets with ^ for negation.
+
+Match “anything but one of” the characters in the square brackets.
+
+```{r}
+# look for anything but hbd
+str_subset(sentences, ' [^hbd]og ')
+```
+
+#### Square brackets for “or” over a range of characters
+
+ Or we can use `-` to look across a range of characters
+
+```{r}
+# look for anything between b and l
+str_subset(sentences, ' [b-l]ot ')
+```
+
+#### Pipe operator for "or" over multi-character patterns
+
+When we need an “or” over multi-character patterns, we can use the “pipe” operator, using parentheses as necessary to identify what’s with what. Note that we *should not* use this with the square brackets now. Instead, we use the square brackets to put an option for upper or lower case s at the beginning of the regex match.
+
+```{r}
+str_subset(sentences, '([Ss]pl|f)it ')
+```
+
+#### Special characters and the backslash
+
+In addition to the backslash itself, there are several characters that have special meaning in R regexes, and (may) have to be escaped in order to match the literal character. Here are the big ones: ^ $ . * + | ! ? ( ) [ ] { } < >.
+
+For example, the period – “.” – means “any character but a newline.” It’s a wildcard. We get different results when we escape or don’t escape it.
+
+```{r}
+allchars <- str_extract_all(combined_string, ".")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\.")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "s.")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "s\\.")
+allchars
+```
+
+Some of these are only special characters in certain contexts and don’t have to be escaped to be recognized when not in those contexts. But they can be escaped in all circumstances and I recommend that rather than trying to figure out the exact rules.
+
+The exclamation point is such a character.
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\!")
+allchars
+```
+
+#### Class shorthands
+
+Conversely, there are a number of characters that have special meaning only when escaped. The main ones for now are “\\w” (any alphanumeric character), “\\s” (any space character), and “\\d” (any numeric digit). The capitalized versions of these are used to mean “anything but” that class.
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\w")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\W")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\s")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\S")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\d")
+allchars
+```
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\D")
+allchars
+```
+
+#### Quantifiers: * (zero or more of the previous)
+
+This is also known as the “Kleene star” (pronounced clean-ee), after its original user (Kleene) who introduced the notation in formal logic.
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\d*") # any string of 0 or more digits
+allchars
+```
+
+Note the "zero" or more led it to identify every position of the string as a match, many of them empty (containing no characters).
+
+#### Quantifiers: + (one or more of the previous)
+
+This is also known as the “Kleene plus.”
+
+```{r}
+allchars <- str_extract_all(combined_string, "\\d+")
+allchars
+```
+
+#### Quantifiers {n} {n,m} and {n,}
+
+{n} = “exactly n” of the previous
+{n,m} = “between n and m” of the previous
+{n,} = “n or more” of the previous
+
+```{r}
+xstring <- c("x xx xxx xxxx xxxxx")
+
+str_extract_all(xstring, "x{3}") # 3 x's
+```
+
+```{r}
+str_extract_all(xstring, "x{3,4}") # 3 or 4 x's
+```
+
+```{r}
+str_extract_all(xstring, "x{3,}") # 3 or more x's
+```
+
+#### Quantifier ? (zero or one of the previous)
+
+```{r}
+str_extract_all(combined_string, "\\d?")
+```
+
+```{r}
+str_subset(sentences, " [bp]?eat ")
+```
+
+#### Anchors at beginning and end of string
+
+```{r}
+# beginning of string
+str_extract_all(combined_string, "^.")
+```
+
+```{r}
+# end of string
+str_extract_all(combined_string, ".$")
+```
+
+#### Anchors at word boundaries
+
+Similarly, we can identify "word boundaries" with \b. 
+
+```{r}
+# word boundary
+str_extract_all(xstring, "\\b\\w+?\\b")
+```
+
+```{r}
+# word boundary
+str_extract_all(combined_string, "\\b\\w+?\\b")
+```
+
+## An example
+
+Consider the following text from a Congressional Bill. We're going to try to use regular expressions to make data out of the appropriations dollars and purposes in bullets 1-9.
+
+```{r}
+text = "SEC. 101. FISCAL YEAR 2017.
+(a) In General.--There are authorized to be appropriated to NASA
+for fiscal year 2017 $19,508,000,000, as follows:
+(1) For Exploration, $4,330,000,000.
+(2) For Space Operations, $5,023,000,000.
+(3) For Science, $5,500,000,000.
+(4) For Aeronautics, $640,000,000.
+(5) For Space Technology, $686,000,000.
+(6) For Education, $115,000,000.
+(7) For Safety, Security, and Mission Services,
+$2,788,600,000.
+(8) For Construction and Environmental Compliance and
+Restoration, $388,000,000.
+(9) For Inspector General, $37,400,000.
+(b) Exception.--In addition to the amounts authorized to be
+appropriated for each account under subsection (a), there are
+authorized to be appropriated additional funds for each such account,
+but only if the authorized amounts for all such accounts are fully
+provided for in annual appropriation Acts, consistent with the
+discretionary spending limits in section 251(c) of the Balanced Budget
+and Emergency Deficit Control Act of 1985."
+```
+
+Note that's *one* string with a bunch of newline characters.
+
+```{r}
+text
+```
+
+Lets play around with a few things. Extract all contiguous sequences of one or more numbers.
+
+```{r}
+digitmatches <- str_extract_all(text, '[0-9]+') # one or more consecutive digits
+digitmatches
+```
+
+That does two things we don't like ... separates numbers at the 1000s separating comma and gets numbers ("101", "2017", etc.) that aren't dollar amounts. So, let's try getting everything that:
+* Starts with a "$" (which needs to be escaped)
+* Followed by one or more strings of commas or digits.
+
+```{r}
+dollarmatches <- str_extract_all(text, '\\$[,0-9]+') # $ followed by one or more digits or commas
+dollarmatches
+```
+
+Almost ... don't like that extra comma on the first number. Let's require it to end with a number.
+
+```{r}
+dollarmatches <- str_extract_all(text, '\\$[,0-9]+[0-9]') # $ followed by one or more digits or commas and ends in a number
+dollarmatches
+```
+
+The things we want are demarcated by numbered items in parentheses. Let's see if we can extract those:
+
+```{r}
+bulletmatches <- str_extract_all(text, '\\([0-9]+\\)') # ( followed by a digit followed by )
+bulletmatches
+
+```
+
+Let's go back to the original and get rid of the newlines. Note that the string.replace() method doesn't accept regular expressions and you need to use re.sub().
+
+```{r}
+one_line <- str_replace(text, "\n", " ")
+one_line
+```
+
+and find all the matches from "(number)" to a period, lazily rather than greedily:
+
+```{r}
+item_strings = str_extract_all(one_line, "\\(\\d\\).+?\\.")
+item_strings
+```
+
+We can use a capture group to gather just the "for what" data ...
+
+```{r}
+for_matches <- str_match(item_strings[[1]], '(For )(.+)(, \\$)')
+for_matches
+```
+
+We can pull the type then from the third column. 
+
+```{r}
+for_matches[,3]
+```
+
+We can also use a capture group just for the money data
+
+```{r}
+money_matches <- str_match(item_strings[[1]], '\\$([, \\d]+)')
+money_matches[,2]
+```
+
+We'll probably want those just to be numbers, so we'll strip the commas:
+
+```{r}
+money_strings_clean <- str_replace_all(money_matches[,2], ",", "")
+money_strings_clean
+```
+
+We'll turn that into numbers and reformat them as millions.
+
+```{r}
+millions <- as.numeric(money_strings_clean)/10e6
+millions
+```
+
+Finally, we can format the data in a dataframe for later processing.
+
+```{r}
+myDf <- as_tibble(as.matrix(cbind(for_matches[,3],millions)))
+```
+
+```{r}
+colnames(myDf) <- c("For", "Millions")
+myDf
+```
+

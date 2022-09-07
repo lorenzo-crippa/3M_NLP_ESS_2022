@@ -1,0 +1,827 @@
+---
+title: An R Markdown document converted from "Tutorial_Two_(R)_Introduction_to_NLP_Annotation_Pipelines.ipynb"
+output: html_document
+---
+
+# Introduction to NLP Annotation Pipelines in R
+
+## Douglas Rice
+
+*This tutorial was originally created by Burt Monroe for his prior work with the Essex Summer School. I've updated and modified it.*
+
+In this notebook, we'll learn about doing NLP tasks in R, including tokenization, stemming, part-of-speech tagging, named entity recognition, and dependency parsing. After completing this notebook, you should be familar with:
+
+1.  Tokenization
+2.  Stemming & Lemmatization
+3.  Part-of-Speech Tagging
+4.  Named Entity Recognition
+5.  Dependency Parsing
+
+# Annotation Pipelines
+
+NLP tasks are typically organized around the concept of an annotation "pipeline" based on a given "language model." Basically, you download/install/load a given model, then pass the model and your input text to the software's annotation pipeline and receive an output object with annotated text.
+
+For example, the pipeline for Stanford CoreNLP is depicted below. The text is first tokenized, then split into sentences, then tokens are tagged with respect to parts of speech, then the tokens are lemmatized, then the named entity recognizer is applied, and finally the dependency parser is applied. The output is an object from which all of those annotations can be accessed.
+
+![CoreNLP Pipeline (Source: <https://stanfordnlp.github.io/CoreNLP/index.html>)](https://stanfordnlp.github.io/CoreNLP/assets/images/pipeline.png)
+
+There are, of course, many packages to for NLP in R. We're going to focus on the workhorses, but that isn't to say there aren't other options.
+
+Practical note: many of these packages contain functions with the same name, so loading order will affect which libraries' commands mask the others'. I have tried to avoid this issue here by explicit use of namespaces, e.g. "quanteda::dfm()". This will often not be necessary when using a particular package in relative isolation.
+
+# Installations
+
+### Installations needed for quanteda section
+
+```{r}
+#install.packages("quanteda")
+```
+
+```{r}
+#install.packages("devtools")
+library(devtools)
+devtools::install_github("quanteda/quanteda.corpora")
+library("quanteda.corpora")
+devtools::install_github("quanteda/quanteda.textmodels") 
+```
+
+```{r}
+#install.packages("tokenizers")
+```
+
+### Installations needed for tm section
+
+```{r}
+#install.packages("tm")
+```
+
+### Installations needed for tidytext section
+
+```{r}
+#install.packages("tidyverse") # or just install dplyr, stringr, and magrittr
+#install.packages("dplyr")
+#install.packages("stringr")
+#install.packages("magrittr")
+library(tidyverse)
+#install.packages("tidytext")
+library(tidytext)
+```
+
+# Text-as-data frameworks/ecosystems
+
+Quanteda, tm, and tidytext are general -- partially overlapping, interrelated, and interconnected -- frameworks for text-as-data analysis, and most social scientific text work in R is managed through one of these. They provide direct access to a varying, but relatively limited, set of tools for NLP per se (things like tokenization, stopword removal, case-folding, and stemming). Their primary strengths are in the data science aspects of managing/wrangling text data as quantitative data for statistical / machine learning analysis.
+
+## quanteda
+
+Quanteda is a very general ecosystem for text analysis in R. There is a more extensive tutorial on quanteda here: XX.
+
+```{r}
+library(quanteda)
+```
+
+There are a number of sample corpora provided by Quanteda in the "quanteda.corpora" and "quanteda.textmodels" packages, which must be installed from Github via the package "devtools." Note that to properly install quanteda.textmodels without errors on RStudio Cloud, I had to increase allocated RAM to 2GB.
+
+```{r}
+library("quanteda.corpora")
+```
+
+For this demonstration, we will use the movie review dataset provided in quanteda.textmodels (a sample of 2000 movie reviews, classified as positive or negative, from Pang and Lee (2004)).
+
+```{r}
+library("quanteda.textmodels")
+movie_corpus <- quanteda.textmodels::data_corpus_moviereviews
+```
+
+The basics of a Quanteda corpus can be accessed through the `summary` command.
+
+```{r}
+summary(movie_corpus)
+```
+
+The raw text can be examined by applying the `as.character` command. Here's the first document:
+
+```{r}
+as.character(movie_corpus[1])
+```
+
+The most basic NLP task is *tokenizing*. You can apply a tokenizer in Quanteda with the `tokens` command, turning a "corpus" object -- or just a vector of texts -- into a "tokens" object. In the latest version of Quanteda, most commands operate on a tokens object.
+
+The examples from the help file show a few of the options:
+
+```{r}
+txt <- c(doc1 = "A sentence, showing how tokens() works.",
+         doc2 = "@quantedainit and #textanalysis https://example.com?p=123.",
+         doc3 = "Self-documenting code??",
+         doc4 = "£1,000,000 for 50¢ is gr8 4ever \U0001f600")
+tokens(txt)
+```
+
+The `what` option selects different tokenizers. The default is `word` which replaces a slower and less subtle `word1` legacy version.
+
+```{r}
+tokens(txt, what = "word1")
+```
+
+For some purposes you may wish to tokenize by characters:
+
+```{r}
+tokens(txt[1], what = "character")
+```
+
+You can "tokenize" (the usual term is "segment") by sentence in Quanteda, but note that they do not recommend using their sentence segmentation tool. Note that there are some stumbles here, partly because the movie corpus has already been "case-folded" to lower-case and partly because it is not written with conventional sentence structure (lots of "..." connectors):
+
+```{r}
+tokens(movie_corpus[1], what = "sentence")
+```
+
+There are a number of options you can apply with the `tokens` command, controlling how the tokenizer deals with punctuation, numbers, symbols, hyphenization, etc.:
+
+```{r}
+# removing punctuation marks but keeping tags and URLs
+tokens(txt[1:2], remove_punct = TRUE)
+
+# splitting hyphenated words
+tokens(txt[3])
+tokens(txt[3], split_hyphens = TRUE)
+
+# symbols and numbers
+tokens(txt[4])
+tokens(txt[4], remove_numbers = TRUE)
+tokens(txt[4], remove_numbers = TRUE, remove_symbols = TRUE)
+```
+
+You can use other tokenizers, like those from the "tokenizers" package:
+
+```{r}
+library(tokenizers)
+tokens(tokenizers::tokenize_words(txt[4]), remove_symbols = TRUE)
+
+tokenizers::tokenize_words(txt, lowercase = FALSE, strip_punct = FALSE) %>%
+  tokens(remove_symbols = TRUE)
+
+tokenizers::tokenize_characters(txt[3], strip_non_alphanum = FALSE) %>%
+    tokens(remove_punct = TRUE)
+
+tokenizers::tokenize_sentences(
+    "The quick brown fox.  It jumped over the lazy dog.") %>%
+    tokens()
+```
+
+Let's make a fairly generic tokens object from our movies corpus.
+
+```{r}
+movie_tokens <- quanteda::tokens(movie_corpus,
+                       what = "word",
+                       remove_punct = TRUE, # default FALSE
+                       remove_symbols = TRUE, # default FALSE
+                       remove_numbers = FALSE,
+                       remove_url = TRUE, # default FALSE
+                       remove_separators = TRUE,
+                       split_hyphens = FALSE,
+                       include_docvars = TRUE,
+                       padding = FALSE,
+                       verbose = quanteda_options("verbose")
+                       )
+```
+
+This provides access to a variety of quanteda utilities. For example, the Key Words in Context utility:
+
+```{r}
+quanteda::kwic(movie_tokens, "leprechaun", window = 5)
+```
+
+Stemming is the truncation of words in an effort to associate related words with a common token, e.g., "baby" and "babies" -\> "babi".
+
+The tokenizers package provides a wrapper to the `wordStem` function from the SnowballC package, which applies a standard stemmer called the Porter stemmer. (The function takes as input a vector of texts or corpus, and returns a list, each element a vector of the stems for the corresponding text.)
+
+```{r}
+#Example from the help file (one "text")
+song <-  paste0("How many roads must a man walk down\n",
+                "Before you call him a man?\n",
+                "How many seas must a white dove sail\n",
+                "Before she sleeps in the sand?\n",
+                "\n",
+                "How many times must the cannonballs fly\n",
+                "Before they're forever banned?\n",
+                "The answer, my friend, is blowin' in the wind.\n",
+                "The answer is blowin' in the wind.\n")
+tokenizers::tokenize_word_stems(song)
+
+#Example applied to (a subset of) a corpus
+tokenizers::tokenize_word_stems(movie_corpus[1:2])
+```
+
+Quanteda is focused largely on bag-of-words (or bag-of-tokens or bag-of-terms) models that work from a document-term matrix.
+
+For example, you can create a document-term matrix from the movie_tokens object:
+
+```{r}
+movie_dfm <- quanteda::dfm(movie_tokens,
+                           tolower = TRUE # casefol
+                           )
+dim(movie_dfm) # 2,000 documents, 48,324 features (types)
+```
+
+You can modify the dfm in a number of ways, such as removing stopwords (`dfm_select`), trimming low frequency documents or terms (`dfm_trim`), weighting features (`dfm_weight` or `dfm_tfidf`), or stemming (`dfm_wordstem`).
+
+```{r}
+movie_dfm_trim <- movie_dfm %>% quanteda::dfm_trim(min_termfreq = 5, min_docfreq = 5)
+dim(movie_dfm_trim) # kept only terms appearing at least 5 times (across all documents) 
+# and documents with at least 5 features
+```
+
+The dfm object can be used for visualization with a word cloud, as input to an unsupervised model like a topic model (e.g., LDA or STM) or a scaling model (e.g., WordFish), as input to a dictionary-based method like Lexicoder/LIWC/VADER sentiment analysis, or as input for a supervised classifier.
+
+## tm ("text mining")
+
+The *tm* package is the grand-daddy of text analysis packages in R, predating both quanteda and tidytext. The basic text processing features of tm are very similar to those of quanteda (in fact, quanteda calls many tm functions under the hood) but with different syntax. There is slightly more flexibility in some tm functions, but quanteda does a wide range of things that tm does not.
+
+```{r}
+library(tm)
+```
+
+We can, for example, create a corpus from a vector of texts:
+
+```{r}
+movie_corpus_tm <- VCorpus(VectorSource(as.character(movie_corpus)))
+movie_corpus_tm
+```
+
+We can associate metadata with each document (in this case transferring from the "document variables" of the quanteda corpus object), which are referred to in tm as "indexed" metadata:
+
+```{r}
+meta(movie_corpus_tm,"sentiment") <- quanteda::docvars(movie_corpus,"sentiment")
+meta(movie_corpus_tm,"id1") <- quanteda::docvars(movie_corpus,"id1")
+meta(movie_corpus_tm,"id2") <- quanteda::docvars(movie_corpus,"id2")
+movie_corpus_tm
+```
+
+You can access documents from the corpus object via the "content" attribute:
+
+```{r}
+movie_corpus_tm[[1]]$content
+```
+
+You can also create a dtm with the tm package:
+
+```{r}
+movie_dtm_tm <- tm::DocumentTermMatrix(movie_corpus_tm)
+tm::inspect(movie_dtm_tm)
+```
+
+The NLP operations we're focused on here are all applied through the `tm_map` function which applies a "transformation" to all documents in a corpus. There are predefined transformations for stemming, word filtering (like stopword removal), removal of numbers and punctuation, and stripping of whitespace -- a list is provided by `getTransformations()`:
+
+```{r}
+tm::getTransformations()
+```
+
+Like with quanteda, tm's `stemDocument` also just calls the SnowballC `wordStem` function:
+
+```{r}
+tm::tm_map(movie_corpus_tm, tm::stemDocument)[[1]]$content
+```
+
+(The transformations are themselves functions that can be applied directly to a document or vector of documents.)
+
+```{r}
+tm::stemDocument(movie_corpus_tm[[1]]$content)
+```
+
+Stopword removal involves passing the `removeWords` function to `tm_map` and a list of words to remove, which can be obtained from the `stopwords` function.
+
+```{r}
+tm::tm_map(movie_corpus_tm,tm::removeWords,tm::stopwords(kind="en"))[[1]]$content
+```
+
+You can also use stopword lists from the *stopwords* package (which I think are mostly the same, as they are loaded by default):
+
+```{r}
+tm::stopwords(kind="de")[1:5]
+stopwords::stopwords(language="de")[1:5]
+```
+
+You can also create your own transformation functions to apply through tm_map using the `content_transformer` function:
+
+```{r}
+f <- tm::content_transformer(function(x, pattern) gsub(pattern, "", x))
+tm::tm_map(movie_corpus_tm, f, "[[:digit:]]+")[[1]]$content
+```
+
+As of this writing, tm has built in access to three predefined tokenizers:
+
+```{r}
+tm::getTokenizers()
+```
+
+Let's try them on our first movie review.
+
+```{r}
+tm::Boost_tokenizer(as.character(movie_corpus)[1]) %>% head(50)
+tm::MC_tokenizer(as.character(movie_corpus)[1]) %>% head(50)
+tm::scan_tokenizer(as.character(movie_corpus)[1]) %>% head(50)
+```
+
+The tm package also has some nice utilities for reading different text formats -- e.g., pdf and xml -- as well as "plugins" for other software (e.g., Alceste) and resources (e.g., Lexis-Nexis).
+
+## tidytext
+
+Tidytext is a package -- a philosophy really -- for approaching text analysis with the logic and vast software ecosystem of the "tidyverse," which includes libraries like dplyr, tidyr, and ggplot2.
+
+There is a whole book on it: <https://www.tidytextmining.com/> (Text Mining with R, by Julia Silge and David Robinson).
+
+The usual first principle of tidytext is to format text as a (tidy) data frame (or tibble) with one row per token. (In some cases, you want to look at other units -- ngrams, sentences, etc. -- and tidytext can do that, too.)
+
+```{r}
+library(dplyr)
+library(stringr)
+library(tidytext)
+```
+
+We need our input texts to be arranged in a "tibble," the tidyverse data.frame class. We'll just use the first 20 movie reviews for this illustration.
+
+```{r}
+first_movies <-  tibble(text=as.character(movie_corpus)[1:20])
+```
+
+We then use the `unnest_tokens` function to convert to the tidytext format of one token per row (which it does by calling the tokenizers package):
+
+```{r}
+tidy_movie <- unnest_tokens(first_movies,word,text)
+head(tidy_movie)
+```
+
+You can similarly specify the type of tokenizing to do with built-ins like "characters", "ngrams", "sentences", "tweets", or custom tokenizers. This is drawn right from the `tokenizers` package, so everything applies in exactly the same way we have already seen.
+
+Since the tokenizing and preprocessing aren't different here, I won't linger in this notebook. But the data management / wrangling principles and practices are and tidytext is definitely worth your time.
+
+# spacyR: spacy (in R)
+
+The **spaCy** package is, by some accounts, now the "default" standard NLP pipeline, especially in industry. Unlike its Python predecessor, NLTK, spaCy is "opinionated" -- it tries to provide easy, computationally efficient access to the best available model for any given task; NLTK provides many options and more direct ability for the researcher to test and modify different models. Also in contrast to NLTK, spaCy interacts nicely with modern neural / deep learning methods.
+
+It was developed, as the above alludes to, for Python. That said, you can access the functionality of spaCy from R using `spacyr`
+
+```{r}
+install.packages("spacyr")
+library(spacyr)
+#setup_spacyr()
+```
+
+### The standard spaCy pipeline (tokens, lemmas, pos, dependencies, ner, morphology, etc.)
+
+The R package loads a given model for classification; since we're in Colab, we'll go with the default and avoid further complications. That said, with spaCy, you have a number of different models to choose from that follow a standard naming convention. The first part specifies the language ("en"), the second part specifies the capabilities ("core"), the third part specifies what it was trained on ("web" or "news") and the last part specifies the size ("sm", "md", "lrg", or "trf").
+
+In the below, we are using the R package's default model, "en_core_web_sm", which is the "English, core capability, trained on the web, small" model.
+
+Note that the model is loaded and assigned to the variable `nlp_spacy`. Now `nlp_spacy` is a *function* that says "run this model's annotation pipeline on these string(s)." This is very standard syntax for NLP pipelines.
+
+By default, spaCy runs *everything* supported by the given model. Here, we'll set up a small text then look at what spaCy does for us.
+
+```{r}
+doc <- c(d1 = "Joel Embiid should have been the 2022 NBA MVP, but instead Nikola Jokic won the award.")
+
+annotated_doc_spacy <- spacy_parse(doc)
+annotated_doc_spacy
+```
+
+As you can see from the above, the default model object contains a host of attributes, which are listed below. Many attributes that are intuitively strings (e.g., the token's lemma, its part of speech tag) are stored internally by spaCy as "hashes" (an integer). The attribute that provides the corresponding text will end in an underscore character.
+
+-   `doc_id`: A unique identifier for the parent document.
+-   `sentence_id`: A unique identifier *within* `doc_id` for the sentence span that this token is a part of.
+-   `token_id`: A unique identifier *within* `doc_id` and `sentence_id` to specify the token within the sentence.
+-   `token`: The actual text of the token.
+-   `lemma`: Base form of the token, with no inflectional suffixes. (string)
+-   `pos`: Coarse-grained part-of-speech from the Universal POS tag set. (string)
+-   `entity`: Named entity type. (string)
+
+As noted, the model here is "en_core_web_sm". Small models are more compact and computationally efficient than the medium, large, or transformer-based models, but less accurate and they do not come with pretrained embeddings. You can see which models are available, along with exact details of each model and performance statistics, here: <https://spacy.io/models/> (As of this writing, there are pretrained models for 22 languages: Catalan, Chinese, Croatian, Danish, Dutch, English, Finnish, French, German, Greek, Italian, Japanese, Korean, Lithuanian, Macedonian, Norwegian, Polish, Portuguese, Romanian, Russian, Spanish, and Swedish), as well as a multi-language support model.
+
+# Named Entities
+
+As we saw above, the spacy pipeline includes a named entity recognizer:
+
+```{r}
+for (i in 1:nrow(annotated_doc_spacy)){
+   if (annotated_doc_spacy$entity[i] != ''){
+      print(paste(annotated_doc_spacy$token[i], annotated_doc_spacy$entity[i], sep = "\t"))  
+   }
+}
+```
+
+Note that the labels for "Joel Embiid" and "NBA MVP" are identified as being single entities (i.e., `PERSON_B` and `PERSON_I`). You can combine those fields to form the full name for each.
+
+Here's a longer speech, from Ketanji Brown Jackson accepting her nomination to the U.S. Supreme Court.
+
+```{r}
+kbj <- c("I have spent years toiling away in the relative solitude of my chambers, with just my law clerks, in isolation. So, it's been somewhat overwhelming, in a good way, to recently be flooded with thousands of notes and cards and photos expressing just how much this moment means to so many people.\nThe notes that I've received from children are particularly cute and especially meaningful because, more than anything, they speak directly to the hope and promise of America.\nIt has taken 232 years and 115 prior appointments for a Black woman to be selected to serve on the Supreme Court of the United States.\nBut we've made it. We've made it, all of us. All of us.\nAnd our children are telling me that they see now, more than ever, that, here in America, anything is possible.\nThey also tell me that I'm a role model, which I take both as an opportunity and as a huge responsibility. I am feeling up to the task, primarily because I know that I am not alone. I am standing on the shoulders of my own role models, generations of Americans who never had anything close to this kind of opportunity but who got up every day and went to work believing in the promise of America, showing others through their determination and, yes, their perseverance that good -- good things can be done in this great country -- from my grandparents on both sides who had only a grade-school education but instilled in my parents the importance of learning, to my parents who went to racially segregated schools growing up and were the first in their families to have the chance to go to college.\nI am also ever buoyed by the leadership of generations past who helped to light the way: Dr. Martin Luther King Jr., Justice Thurgood Marshall, and my personal heroine, Judge Constance Baker Motley. They, and so many others, did the heavy lifting that made this day possible. And for all of the talk of this historic nomination and now confirmation, I think of them as the true pathbreakers. I am just the very lucky first inheritor of the dream of liberty and justice for all.\nTo be sure, I have worked hard to get to this point in my career, and I have now achieved something far beyond anything my grandparents could've possibly ever imagined. But no one does this on their own. The path was cleared for me so that I might rise to this occasion. And in the poetic words of Dr. Maya Angelou, I do so now, while 'bringing the gifts...my ancestors gave.'  'I am the dream and the hope of the slave.' So as I take on this new role, I strongly believe that this is a moment in which all Americans can take great pride. We have come a long way toward perfecting our union. In my family, it took just one generation to go from segregation to the Supreme Court of the United States. And it is an honor -- the honor of a lifetime -- for me to have this chance to join the Court, to promote the rule of law at the highest level, and to do my part to carry our shared project of democracy and equal justice under law forward, into the future. Thank you, again, Mr. President and members of the Senate for this incredible honor.")
+```
+
+```{r}
+annotated_kbj_spacy <- spacy_parse(kbj)
+annotated_kbj_spacy[1:5,]
+
+for (i in 1:nrow(annotated_kbj_spacy)){
+   if (annotated_kbj_spacy$entity[i] != ''){
+      print(paste(annotated_kbj_spacy$token[i], annotated_kbj_spacy$entity[i], sep = "\t"))  
+   }
+}
+```
+
+## UDPipe
+
+The **udpipe** package provides an R wrapper for the C++ software UDPipe, described by Straka, et al. (2016): <https://aclanthology.org/L16-1680/>
+
+Official description of UDPipe:
+
+> UDPipe is a trainable pipeline for tokenization, tagging, lemmatization and dependency parsing of CoNLL-U files. UDPipe is language-agnostic and can be trained given annotated data in CoNLL-U format. Trained models are provided for nearly all UD treebanks.
+
+A major benefit of UDPipe generally is its ability to be adapted to multiple languages. There are, as of this writing, 101 models of 65 languages available.
+
+A major benefit for R users is that it does not have Java, Python or other dependencies that can offer installation challenges with other NLP pipeline packages.
+
+```{r}
+library(udpipe)
+```
+
+```{r}
+dl <- udpipe::udpipe_download_model(language = "english")
+str(dl)
+```
+
+```{r}
+udmodel_english <- udpipe::udpipe_load_model(file = dl$file_model)
+```
+
+```{r}
+txt <- "The quick brown fox jumped over the lazy dog. Wait, don't you mean, 'The quick brown fox jumps over the lazy dog?' Your version is missing the 's'!"
+annotated_txt_udp <- udpipe::udpipe_annotate(udmodel_english, x = txt)
+annotated_txt_udp <- as.data.frame(annotated_txt_udp)
+annotated_txt_udp
+```
+
+By default, the `udpipe_annotate` command does tokenization, POS tagging, lemmatization and dependency parsing, but you can leave parts of this out with options.
+
+It should also be noted that udpipe has support for general text-as-data sorts of tasks, as noted above.
+
+The udpipe package author, Jan Wijffels, has authored several other NLP/text packages mentioned here or in other notebooks with this course and there are many interrelations: <https://cran.r-project.org/web/packages/udpipe/vignettes/udpipe-universe.html>. This is another advantage of udpipe for R users.
+
+The documentation offers several social science text-as-data sorts of use cases, especially unsupervised tasks like topic modeling. See for example <https://cran.r-project.org/web/packages/udpipe/vignettes/udpipe-usecase-postagging-lemmatisation.html> and <https://cran.r-project.org/web/packages/udpipe/vignettes/udpipe-usecase-topicmodelling.html>.
+
+# cleanNLP
+
+```{r}
+install.packages("cleanNLP")
+library(cleanNLP)
+```
+
+## `cleanNLP` and CoreNLP and Spacy, oh my.
+
+The standard-bearer for NLP work is Stanford's CoreNLP suite (available [here](https://stanfordnlp.github.io/CoreNLP/)). Historically, that work was available in Java, with really ineffective ports to other programming languages. Fortunately, the past few years have seen major progress in making the suite more accessible in both Python and R. We're going to leverage the best package with the best port to R --- `cleanNLP` --- for our NLP tasks.
+
+Stanford's CoreNLP, though, is just one of many NLP annotation tools available with `cleanNLP`. There are two important points to highlight related to this. First, in addition to CoreNLP, `cleanNLP` can leverage spacy, a high-powered Python library; spacy is (much) faster than CoreNLP, but with some cost in classification accuracy. Second, both CoreNLP and spacy require a Python installation on your machine. Because of that, we can't run the CoreNLP or spacy code **here on Colab** (it's a long story). We will be able to use the universal dependencies pipe (udpipe), so that's what we'll do here.
+
+More generally, though, you'll want to have the capacity provided by CoreNLP or spacy available for your projects on your personal machine. Therefore, you need to install Python. I recommend installing Anaconda Python (available [here](https://www.anaconda.com/products/individual)). Once you've done that, you'll need to install the `cleanNLP` module within Python.
+
+# CleanNLP
+
+To get started, you'll need to initialize the NLP backend. We'll be using the `udpipe` backend, which comes installed with the `cleanNLP` package.
+
+```{r}
+cnlp_init_udpipe()
+```
+
+We have our NLP backend initialized and ready to roll. But we never decided on data for today! We'll be using the U.S. Presidential Inaugural Address corpus, which comes pre-loaded with `quanteda`. The corpus is already in your workspace (since it is pre-loaded) as `data_corpus_inaugural`; it features speeches from 1789 to the present, with document variables indicating the year (`Year`) of the speech, the last name of the president (`President`), and their political party (`Party`).
+
+```{r}
+# pull the corpus as a character vector (which works with cleanNLP) rather than a corpus object, which does not.
+text <- texts(data_corpus_inaugural)
+
+# To give you an idea of what these look like, here's Trump's speech
+text[length(text)]
+```
+
+```{r}
+# pull out the data we want
+myData <- docvars(data_corpus_inaugural)
+head(myData)
+
+# now add the text to our data frame for running the annotation tool; column must be named `text`
+myData$text <- text
+```
+
+The steps we take in the above get the data ready for use with the NLP package `cleanNLP`. This is, unfortunately, a common theme in R and other open-source programming languages. The ability for users to contribute their own packages means we have an enormous amount of flexibility and progress happens **fast**, but the tradeoff is that the different packages don't always play well with one another. As you get more familiar with working in R, getting used to moving between the preferred formats of different packages becomes easier.
+
+With that said, those simple steps above are all we need to do to get our texts ready for annotation with `cleanNLP`, which takes a vector of file names, a character vector with one document in each element, *or* a data frame as input. If we have a corpus --- as we often do --- we can convert it to a character vector as above and be ready to annotate.
+
+## Annotation
+
+So, let's annotate. The next line is going to take a few minutes so it's a good chance to go take care of making that pot of coffee you forgot to make before starting this up.
+
+```{r}
+annotated <- cnlp_annotate(myData)
+```
+
+The output for each of the backends is going to look a little bit different, though the general structure will be consistent. Here we can start seeing what our udpipe annotation looks like. The first thing to note is that it is a very particular type of object with two fields: `token` and `document`. Both are dataframes; `token` is a dataframe featuring the annotations from the text, while `document` is a dataframe featuring just the unique document IDs. We'll primarily be interested in the former.
+
+```{r}
+head(annotated$token)
+```
+
+```{r}
+head(annotated$document)
+```
+
+If we wanted, we could create a single database from both of these using `doc_id` variable present in both. This is particularly helpful for downstream analyses we might want to do that would analyze --- say --- patterns over time.
+
+```{r}
+annoData <- left_join(annotated$document, annotated$token, by = "doc_id")
+head(annoData)
+```
+
+# Annotated Data
+
+Let's discuss what this new annotated data set provides. First, note that speeches are now organized at the token level. Three variables help us to index this new level: `doc_id`, the number of the document in the corpus; `sid`, the number of the sentence within the document; and `tid`, the number of the `token` within the sentence. At a really basic level then, we can now figure out the number of sentences within each document, and the average length (in tokens) of those sentences. Here's the former.
+
+```{r}
+# plot length of documents (in sentences) over time
+annoData %>% 
+  group_by(Year) %>% 
+  summarize(Sentences = max(sid)) %>%
+  ggplot(aes(Year, Sentences)) +
+    geom_line() +
+    geom_smooth() +
+    theme_bw()
+```
+
+This is interesting and potentially useful information. Length is incredibly simple to estimate and has been used as a proxy in published research for, among other things, the [complexity of public policies like the Affordable Care Act](https://papers.ssrn.com/sol3/papers.cfm?abstract_id=2307352) and, in the case of judicial opinions, [a host of legal characteristics of interest (dicta, law clerk influence, etc.)](https://houstonlawreview.org/article/4873-an-empirical-analysis-of-the-length-of-u-s-supreme-court-opinions). Length is also often connected with readability statistics, which we will come to in later sections of the course.
+
+That said, the real prize of the annotations are the details related to each individual token. The next three columns (`token`, `token_with_ws`, and `lemma`) all relate directly to the actual characters of the token. Take, as an example, "Citizens" (third row). The `token` is "Citizens", while the lemma is a headword for a group of related words; here, "citizen" is the lemma of "Citizens" as it is the non-plural version of the token. To get an idea of how else lemmatization changes the tokens, here's a comparison of the first 40 tokens in the dataset.
+
+```{r}
+cbind(head(annoData$token,40), head(annoData$lemma,40))
+```
+
+Lemmatization can be particularly useful as a pre-processing step in some analyses; topic modeling immediately comes to mind. The general reason is that references to different forms of the same underlying token (say, "transmit", "transmitted", "transmits") all connote one related concept but are going to be treated as entirely distinct tokens if we were to say just look for the most frequent tokens in the corpus or in a speech. We'll come back to this later this semester when we discuss stemming and other related pre-processing considerations.
+
+# Universal Dependencies
+
+Now we are into the heart of the annotations. Let's highlight a chunk of the data to use as illustrations.
+
+```{r}
+# First tokens from Trump's speech
+head(annoData[which(annoData$Year == 2017),9:15],28)
+```
+
+Next, `upos` stands for the universal part of speech tag while `xpos` stands for the treebank-specific part of speech. You can find descriptions of each `upos` classification tag [here](https://universaldependencies.org/u/pos/index.html). Knowing the parts of speech, we could --- at a really basic level --- just look to see what adjectives are most frequently used in presidential addresses overall, and in the most recent era (i.e., post 2000).
+
+```{r}
+annoData %>% 
+  filter(Party == "Republican") %>%
+  filter(Year > 1980) %>%
+  filter(upos == "NOUN") %>%
+  group_by(lemma) %>% 
+  summarize(count = n()) %>%
+  top_n(n=10) %>%
+  arrange(desc(count))
+
+annoData %>% 
+  filter(Party == "Democratic") %>%
+  filter(Year > 1980) %>%
+  filter(upos == "NOUN") %>%
+  group_by(lemma) %>% 
+  summarize(count = n()) %>%
+  top_n(n=10) %>%
+  arrange(desc(count))
+```
+
+You can further distinguish parts of speech using the `feats` field, which references more specific "features" related to the parts of speech. More information on the features can be found [here](https://universaldependencies.org/u/feat/index.html).
+
+## Dependency Relations
+
+Finally, the relationships *between* tokens are captured in dependency relations, which are reflected by syntactic annotations through `tid_source` and `relation`. The goal of dependency relations is to form a generalizable structure of language that works *across* languages (thus, universal dependencies). If we want to capture meaning from many different texts in different languages (with all of the different customs of those particular languages), we would first want to have some generalizable structure about how words in languages fit together.
+
+Consider a sentence like:
+
+> The child chased the dog down the hall.
+
+The underlying idea behind dependency relations is to focus primarily on content words; in the above, that would be "child", "chased", "dog", and "hall". We can start to see how knowing *just* those four words gets us a long way to understanding what might be happening; if we can add in some sort of structure (say, that "child" is the nominal subject [`nsubj`], or the do-er of the action, and "dog" is the object [`obj`], or the receiver of the action) then we can recognize that a child chased a dog (rather than the much-less-cute reverse).
+
+The full list of dependency relations and their abbreviations can be found [here](https://universaldependencies.org/u/dep/).
+
+What can we do with dependency relations? At the simplest level, they can be features that we rely on for classification. For that matter, everything we've covered in this tutorial could be a feature. We'll cover classifiers later this semester and will be able to explore this avenue a bit more then.
+
+We could also, however, be more directly interested in using the dependency relations to study particular choices over word usage in texts. As an example, consider unique phrasings from President Obama's 2009 inauguration speech and President Trump's 2017 speech (for more on the approach here, see the `cleanNLP` documentation [here](https://statsmaths.github.io/cleanNLP/state-of-union.html).
+
+```{r}
+library(magrittr)
+
+# Trump 2017
+annoData %>%
+  left_join(
+    annotated$token,
+    c("doc_id"="doc_id", "sid"="sid", "tid"="tid_source"),
+    suffix=c("", "_source")
+  ) %>%
+  filter(Year == 2017) %>%
+  filter(relation == "obj") %>%
+  select(doc_id = doc_id, start = token, word = token_source) %>%
+  left_join(word_frequency, by="word") %>%
+  filter(frequency < 0.005) %>%
+  select(doc_id, start, word) %$%
+  sprintf("%s => %s", start, word)
+```
+
+```{r}
+# Obama 2009
+annoData %>%
+  left_join(
+    annotated$token,
+    c("doc_id"="doc_id", "sid"="sid", "tid"="tid_source"),
+    suffix=c("", "_source")
+  ) %>%
+  filter(Year == 2009) %>%
+  filter(relation == "obj") %>%
+  select(doc_id = doc_id, start = token, word = token_source) %>%
+  left_join(word_frequency, by="word") %>%
+  filter(frequency < 0.005) %>%
+  select(doc_id, start, word) %$%
+  sprintf("%s => %s", start, word)
+```
+
+# Utility packages
+
+These are packages that provide supporting functionality and more specialized options for things like tokenization.
+
+## SnowballC / Rstem
+
+Official description of **SnowballC**:
+
+> An R interface to the C 'libstemmer' library that implements Porter's word stemming algorithm for collapsing words to a common root to aid comparison of vocabulary. Currently supported languages are Danish, Dutch, English, Finnish, French, German, Hungarian, Italian, Norwegian, Portuguese, Romanian, Russian, Spanish, Swedish and Turkish.
+
+SnowballC is called by the stemming functions of several of the general packages discussed above.
+
+The package **Rstem** appears to do the same thing.
+
+## stopwords
+
+Official description:
+
+> R package providing "one-stop shopping" (or should that be "one-shop stopping"?) for stopword lists in R, for multiple languages and sources. No longer should text analysis or NLP packages bake in their own stopword lists or functions, since this package can accommodate them all, and is easily extended.
+
+*stopwords* is part of the quanteda ecosystem. It wraps stopword lists from multiple sources. To access, specify a source and a language:
+
+```{r}
+head(stopwords::stopwords("de", source = "snowball"), 20)
+head(stopwords::stopwords("ja", source = "marimo"), 20)
+```
+
+The sources can be accessed with `stopwords_getsources`:
+
+```{r}
+# list all sources
+stopwords::stopwords_getsources()
+```
+
+The languages for each source can be accessed via `stopwords_getlanguages`:
+
+```{r}
+stopwords::stopwords_getlanguages("snowball")
+```
+
+A full list is maintained on the project's github: <https://github.com/quanteda/stopwords>.
+
+## tokenizers
+
+Examples from the tokenizers documentation:
+
+```{r}
+james <- paste0(
+  "The question thus becomes a verbal one\n",
+  "again; and our knowledge of all these early stages of thought and feeling\n",
+  "is in any case so conjectural and imperfect that farther discussion would\n",
+  "not be worth while.\n",
+  "\n",
+  "Religion, therefore, as I now ask you arbitrarily to take it, shall mean\n",
+  "for us _the feelings, acts, and experiences of individual men in their\n",
+  "solitude, so far as they apprehend themselves to stand in relation to\n",
+  "whatever they may consider the divine_. Since the relation may be either\n",
+  "moral, physical, or ritual, it is evident that out of religion in the\n",
+  "sense in which we take it, theologies, philosophies, and ecclesiastical\n",
+  "organizations may secondarily grow.\n"
+)
+```
+
+Tokenize into characters:
+
+```{r}
+tokenizers::tokenize_characters(james)[[1]] %>% head(20)
+```
+
+Tokenize into character shingles:
+
+```{r}
+tokenizers::tokenize_character_shingles(james)[[1]] %>% head(20)
+```
+
+Tokenize into words:
+
+```{r}
+tokenizers::tokenize_words(james)[[1]] %>% head(20)
+```
+
+Tokenize into word stems:
+
+```{r}
+tokenizers::tokenize_word_stems(james)[[1]] %>% head(20)
+```
+
+Tokenize into words omitting stopwords:
+
+```{r}
+tokenizers::tokenize_words(james, stopwords = stopwords::stopwords("en"))[[1]] %>% head(20)
+```
+
+Tokenize into words (and punctuation) using the Penn Tree Bank tokenizer instead:
+
+```{r}
+tokenizers::tokenize_ptb(james)[[1]] %>% head(20)
+```
+
+Tokenize into ngrams:
+
+```{r}
+tokenizers::tokenize_ngrams(james, n = 5, n_min = 2)[[1]] %>% head(20)
+```
+
+Tokenize into skipgrams:
+
+```{r}
+tokenizers::tokenize_skip_ngrams(james, n = 5, n_min = 2,k=2)[[1]] %>% head(20)
+```
+
+There is a special tweet tokenizer, treating usernames and hashtags differently:
+
+```{r}
+tokenize_tweets("Welcome, @user, to the tokenizers package. #rstats #forever")
+```
+
+"Tokenize" into sentences:
+
+```{r}
+tokenizers::tokenize_sentences(james)
+```
+
+"Tokenize" into paragraphs:
+
+```{r}
+tokenizers::tokenize_paragraphs(james)
+```
+
+## tokenizers.bpe
+
+Does Byte-Pair Encoding tokenization (syllables/wordpieces) using "YouTokenToMe".
+
+## sentencepiece
+
+Another Byte Pair Encoding algorithm
+
+## NLP
+
+Official description: "Basic classes and methods for Natural Language Processing." Provides some of the underlying infrastructure for udpipe, openNLP, and cleanNLP. The use of the String, Annotator, Annotations, Span classes is shown in the openNLP discussion above.
+
+## tif - Text Interchange Format
+
+Official description:
+
+> This package describes and validates formats for storing common object arising in text analysis as native R objects. Representations of a text corpus, document term matrix, and tokenized text are included. The tokenized text format is extensible to include other annotations. There are two versions of the corpus and tokens objects; packages should accept both and return or coerce to at least one of these.
+
+Lincoln Mullen describes tif, which he adopted in the tokenizers package:
+
+> The Text Interchange Formats are a set of standards defined at an rOpenSci sponsored meeting in London in 2017. The formats allow R text analysis packages to target defined inputs and outputs for corpora, tokens, and document-term matrices. By adhering to these recommendations, R packages can buy into an interoperable ecosystem.
+
+See <https://github.com/ropensci/tif>
+
+## Others
+
+### nametagger
+
+NER with Markov models
+
+### torch.ner
+
+NER with torch.
+
+### crfsuite
+
+NER with conditional random fields.
+
+### hunspell
+
+Spell-checking
+
+### wordnet
+
+Access to WordNet (<https://wordnet.princeton.edu/>)
+
+### tau
+
+Provides encoding utilities
